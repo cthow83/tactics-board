@@ -85,6 +85,14 @@
         gap: 10px;
     }
 
+    .mode-controls {
+        display: flex;
+        gap: 8px;
+        justify-self: center;
+        grid-column: 1 / -1;
+        /* span both columns on small screens so it can be centered */
+    }
+
     .ctrl-btn {
         min-height: 46px;
         padding: 10px 14px;
@@ -236,6 +244,11 @@
             justify-content: center;
         }
 
+        .mode-controls {
+            grid-column: auto;
+            justify-self: end;
+        }
+
         .editor-row {
             grid-template-columns: minmax(0, 1fr) 220px;
             align-items: end;
@@ -258,7 +271,7 @@
         <div class="controls">
             <button id="reset-btn" class="ctrl-btn" type="button">Reset layout</button>
             <button id="rename-btn" class="ctrl-btn" type="button" disabled>Rename selected</button>
-            <div style="display:flex;gap:8px;justify-self:end">
+            <div class="mode-controls">
                 <button id="mode-standard-btn" class="ctrl-btn" type="button" aria-pressed="true">Standard
                     Whiteboard</button>
                 <button id="mode-attack-btn" class="ctrl-btn" type="button" aria-pressed="false">Attacking
