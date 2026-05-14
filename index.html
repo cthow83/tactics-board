@@ -1,44 +1,138 @@
 <style>
+    :root {
+        --bg-top: #f2f7ef;
+        --bg-bottom: #d8e7d8;
+        --panel-bg: rgba(248, 250, 247, 0.88);
+        --panel-border: rgba(21, 47, 23, 0.12);
+        --text-strong: #152f17;
+        --text-muted: #4f6750;
+        --action-bg: #f7faf5;
+        --action-bg-pressed: #e5efe2;
+        --action-border: rgba(21, 47, 23, 0.16);
+        --action-disabled: rgba(21, 47, 23, 0.08);
+        --shadow-soft: 0 18px 40px rgba(17, 45, 20, 0.12);
+        --radius-lg: 22px;
+        --radius-md: 14px;
+        --font-ui: "Avenir Next", "Segoe UI", sans-serif;
+    }
+
     * {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
     }
 
+    html,
+    body {
+        min-height: 100%;
+    }
+
     body {
         user-select: none;
+        font-family: var(--font-ui);
+        color: var(--text-strong);
+        background:
+            radial-gradient(circle at top, rgba(255, 255, 255, 0.8), transparent 35%),
+            linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+        padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+        overscroll-behavior: none;
+    }
+
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
     }
 
     .board {
         position: relative;
-        width: 100%;
-        max-width: 660px;
+        width: min(100%, 760px);
         margin: 0 auto;
-        padding: 12px 0 16px;
+        padding: 6px 0 0;
+    }
+
+    .top-bar {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .title-block {
+        text-align: center;
+    }
+
+    .title {
+        font-size: clamp(1.2rem, 3vw, 1.7rem);
+        font-weight: 700;
+        letter-spacing: 0.01em;
+    }
+
+    .subtitle {
+        margin-top: 4px;
+        font-size: 0.92rem;
+        color: var(--text-muted);
     }
 
     .controls {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-bottom: 12px;
-        align-items: center;
-        justify-content: center;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
     }
 
     .ctrl-btn {
-        font-size: 12px;
-        padding: 5px 12px;
-        border: 0.5px solid var(--color-border-secondary);
-        background: var(--color-background-primary);
-        color: var(--color-text-primary);
-        border-radius: var(--border-radius-md);
+        min-height: 46px;
+        padding: 10px 14px;
+        border: 1px solid var(--action-border);
+        background: var(--action-bg);
+        color: var(--text-strong);
+        border-radius: var(--radius-md);
         cursor: pointer;
-        transition: background 0.15s;
+        transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+        font: inherit;
+        font-size: 0.95rem;
+        font-weight: 600;
+        box-shadow: 0 8px 18px rgba(20, 51, 23, 0.06);
+        -webkit-tap-highlight-color: transparent;
     }
 
-    .ctrl-btn:hover {
-        background: var(--color-background-secondary);
+    .ctrl-btn:hover,
+    .ctrl-btn:focus-visible {
+        background: var(--action-bg-pressed);
+        border-color: rgba(21, 47, 23, 0.28);
+    }
+
+    .ctrl-btn:active {
+        transform: translateY(1px) scale(0.99);
+    }
+
+    .ctrl-btn:disabled {
+        background: var(--action-disabled);
+        color: rgba(21, 47, 23, 0.45);
+        cursor: default;
+        box-shadow: none;
+    }
+
+    .selection-status {
+        padding: 11px 14px;
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.56);
+        border: 1px solid rgba(21, 47, 23, 0.08);
+        color: var(--text-muted);
+        font-size: 0.92rem;
+        text-align: center;
+    }
+
+    .pitch-wrap {
+        overflow: hidden;
+        border-radius: clamp(18px, 4vw, 28px);
+        background: rgba(12, 43, 16, 0.18);
+        box-shadow: var(--shadow-soft);
     }
 
     svg#pitch {
@@ -49,46 +143,155 @@
 
     .info-bar {
         text-align: center;
-        font-size: 12px;
-        color: var(--color-text-tertiary);
-        margin-top: 8px;
+        font-size: 0.9rem;
+        line-height: 1.45;
+        color: var(--text-muted);
+        margin-top: 12px;
+        padding: 0 6px;
+    }
+
+    .editor-bar {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--panel-border);
+        background: var(--panel-bg);
+        backdrop-filter: blur(14px);
+        box-shadow: var(--shadow-soft);
+    }
+
+    .editor-bar[hidden] {
+        display: none;
+    }
+
+    .editor-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+    }
+
+    .editor-copy {
+        margin-top: 3px;
+        font-size: 0.88rem;
+        color: var(--text-muted);
+    }
+
+    .editor-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .name-input {
+        width: 100%;
+        min-height: 46px;
+        padding: 11px 13px;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(21, 47, 23, 0.16);
+        background: rgba(255, 255, 255, 0.92);
+        font: inherit;
+        font-size: 1rem;
+        color: var(--text-strong);
+    }
+
+    .editor-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    @media (min-width: 620px) {
+        .top-bar {
+            margin-bottom: 14px;
+        }
+
+        .controls {
+            grid-template-columns: repeat(2, max-content);
+            justify-content: center;
+        }
+
+        .editor-row {
+            grid-template-columns: minmax(0, 1fr) 220px;
+            align-items: end;
+        }
+
+        .editor-actions {
+            grid-template-columns: repeat(2, 1fr);
+        }
     }
 </style>
 
 <div class="board">
-    <h2 class="sr-only">Interactive 7-a-side football tactics board — drag any player or the ball</h2>
-    <div class="controls">
-        <button class="ctrl-btn" onclick="resetPositions()">↺ Reset</button>
+    <h2 class="sr-only">Interactive 7-a-side football tactics board</h2>
+    <div class="top-bar">
+        <div class="title-block">
+            <div class="title">7-a-side tactics board</div>
+            <div class="subtitle">Built for quick setup on phone and tablet screens.</div>
+        </div>
+
+        <div class="controls">
+            <button id="reset-btn" class="ctrl-btn" type="button">Reset layout</button>
+            <button id="rename-btn" class="ctrl-btn" type="button" disabled>Rename selected</button>
+        </div>
+
+        <div id="selection-status" class="selection-status">Drag players with one finger. Tap a player to rename without
+            needing a double-click.</div>
     </div>
 
-    <svg id="pitch" viewBox="0 0 400 560" xmlns="http://www.w3.org/2000/svg">
-        <rect width="400" height="560" fill="#2d6a32" />
-        <rect x="0" y="0" width="400" height="56" fill="#286030" opacity="0.5" />
-        <rect x="0" y="112" width="400" height="56" fill="#286030" opacity="0.5" />
-        <rect x="0" y="224" width="400" height="56" fill="#286030" opacity="0.5" />
-        <rect x="0" y="336" width="400" height="56" fill="#286030" opacity="0.5" />
-        <rect x="0" y="448" width="400" height="56" fill="#286030" opacity="0.5" />
-        <rect x="20" y="20" width="360" height="520" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <line x1="20" y1="280" x2="380" y2="280" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <circle cx="200" cy="280" r="42" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <circle cx="200" cy="280" r="2" fill="rgba(255,255,255,0.7)" />
-        <rect x="100" y="20" width="200" height="70" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <rect x="150" y="20" width="100" height="25" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <circle cx="200" cy="70" r="2" fill="rgba(255,255,255,0.7)" />
-        <rect x="100" y="470" width="200" height="70" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <rect x="150" y="515" width="100" height="25" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <circle cx="200" cy="490" r="2" fill="rgba(255,255,255,0.7)" />
-        <path d="M 20 34 A 10 10 0 0 1 34 20" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <path d="M 366 20 A 10 10 0 0 1 380 34" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <path d="M 20 526 A 10 10 0 0 0 34 540" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <path d="M 380 526 A 10 10 0 0 1 366 540" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <rect x="160" y="10" width="80" height="12" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <rect x="160" y="538" width="80" height="12" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-        <g id="players-A"></g>
-        <g id="players-B"></g>
-        <g id="ball-group"></g>
-    </svg>
-    <div class="info-bar">Drag any player or the ball · Double-click a player to rename</div>
+    <div class="pitch-wrap">
+        <svg id="pitch" viewBox="0 0 400 560" xmlns="http://www.w3.org/2000/svg" aria-label="Football tactics pitch">
+            <rect width="400" height="560" fill="#2d6a32" />
+            <rect x="0" y="0" width="400" height="56" fill="#286030" opacity="0.5" />
+            <rect x="0" y="112" width="400" height="56" fill="#286030" opacity="0.5" />
+            <rect x="0" y="224" width="400" height="56" fill="#286030" opacity="0.5" />
+            <rect x="0" y="336" width="400" height="56" fill="#286030" opacity="0.5" />
+            <rect x="0" y="448" width="400" height="56" fill="#286030" opacity="0.5" />
+            <rect x="20" y="20" width="360" height="520" fill="none" stroke="rgba(255,255,255,0.7)"
+                stroke-width="1.5" />
+            <line x1="20" y1="280" x2="380" y2="280" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
+            <circle cx="200" cy="280" r="42" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
+            <circle cx="200" cy="280" r="2" fill="rgba(255,255,255,0.7)" />
+            <rect x="100" y="20" width="200" height="70" fill="none" stroke="rgba(255,255,255,0.7)"
+                stroke-width="1.5" />
+            <rect x="150" y="20" width="100" height="25" fill="none" stroke="rgba(255,255,255,0.7)"
+                stroke-width="1.5" />
+            <circle cx="200" cy="70" r="2" fill="rgba(255,255,255,0.7)" />
+            <rect x="100" y="470" width="200" height="70" fill="none" stroke="rgba(255,255,255,0.7)"
+                stroke-width="1.5" />
+            <rect x="150" y="515" width="100" height="25" fill="none" stroke="rgba(255,255,255,0.7)"
+                stroke-width="1.5" />
+            <circle cx="200" cy="490" r="2" fill="rgba(255,255,255,0.7)" />
+            <path d="M 20 34 A 10 10 0 0 1 34 20" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
+            <path d="M 366 20 A 10 10 0 0 1 380 34" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
+            <path d="M 20 526 A 10 10 0 0 0 34 540" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
+            <path d="M 380 526 A 10 10 0 0 1 366 540" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
+            <rect x="160" y="10" width="80" height="12" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
+            <rect x="160" y="538" width="80" height="12" fill="none" stroke="rgba(255,255,255,0.7)"
+                stroke-width="1.5" />
+            <g id="players-A"></g>
+            <g id="players-B"></g>
+            <g id="ball-group"></g>
+        </svg>
+    </div>
+
+    <div class="info-bar">Drag any player or the ball. On touch devices, a tap opens the name editor; on desktop,
+        double-click still works.</div>
+
+    <form id="name-editor" class="editor-bar" hidden>
+        <div class="editor-title">Rename player</div>
+        <div id="editor-copy" class="editor-copy">Pick a player to edit the shirt number or label.</div>
+        <div class="editor-row">
+            <input id="player-name-input" class="name-input" type="text" inputmode="text" autocomplete="off"
+                spellcheck="false" placeholder="7 ST" />
+            <div class="editor-actions">
+                <button class="ctrl-btn" type="submit">Save name</button>
+                <button id="cancel-edit-btn" class="ctrl-btn" type="button">Close</button>
+            </div>
+        </div>
+    </form>
 </div>
 
 <script>
@@ -102,136 +305,318 @@
     };
     const colorA = { fill: '#185FA5', stroke: '#B5D4F4', text: '#fff' };
     const colorB = { fill: '#A32D2D', stroke: '#F7C1C1', text: '#fff' };
+    const isTouchLikeDevice = window.matchMedia('(hover: none), (pointer: coarse)').matches;
 
-    let playerPositions, playerNames;
+    let playerPositions;
+    let playerNames;
     let ballPos = [200, 280];
+    let selectedPlayer = null;
 
-    function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
+    const pitch = document.getElementById('pitch');
+    const resetBtn = document.getElementById('reset-btn');
+    const renameBtn = document.getElementById('rename-btn');
+    const selectionStatus = document.getElementById('selection-status');
+    const nameEditor = document.getElementById('name-editor');
+    const editorCopy = document.getElementById('editor-copy');
+    const playerNameInput = document.getElementById('player-name-input');
+    const cancelEditBtn = document.getElementById('cancel-edit-btn');
+
+    ensureViewportMeta();
+
+    function ensureViewportMeta() {
+        if (document.querySelector('meta[name="viewport"]')) {
+            return;
+        }
+
+        const meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
+        document.head.appendChild(meta);
+    }
+
+    function deepCopy(value) {
+        return JSON.parse(JSON.stringify(value));
+    }
 
     function initPositions() {
         playerPositions = deepCopy(defaultPositions);
         playerNames = deepCopy(defaultNames);
         ballPos = [200, 280];
+        clearSelection();
     }
 
     function getSVGPoint(clientX, clientY) {
-        const svg = document.getElementById('pitch');
-        const pt = svg.createSVGPoint();
-        pt.x = clientX; pt.y = clientY;
-        return pt.matrixTransform(svg.getScreenCTM().inverse());
+        const pt = pitch.createSVGPoint();
+        pt.x = clientX;
+        pt.y = clientY;
+        return pt.matrixTransform(pitch.getScreenCTM().inverse());
     }
 
-    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+    function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
 
-    function makeDraggable(el, onMove) {
-        el.addEventListener('mousedown', e => {
-            e.preventDefault(); e.stopPropagation();
-            const move = ev => onMove(ev.clientX, ev.clientY);
-            const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
-            document.addEventListener('mousemove', move);
-            document.addEventListener('mouseup', up);
+    function setStatus(message) {
+        selectionStatus.textContent = message;
+    }
+
+    function setSelectedPlayer(team, index) {
+        selectedPlayer = { team, index };
+        renameBtn.disabled = false;
+        setStatus(`Selected ${playerNames[team][index]}. Drag to reposition or rename below.`);
+    }
+
+    function clearSelection() {
+        selectedPlayer = null;
+        renameBtn.disabled = true;
+        closeNameEditor();
+        setStatus('Drag players with one finger. Tap a player to rename without needing a double-click.');
+    }
+
+    function openNameEditor() {
+        if (!selectedPlayer) {
+            return;
+        }
+
+        const { team, index } = selectedPlayer;
+        const currentName = playerNames[team][index];
+        editorCopy.textContent = `Editing ${currentName}. Keep the shirt number and role together if you want both shown.`;
+        playerNameInput.value = currentName;
+        nameEditor.hidden = false;
+
+        if (isTouchLikeDevice) {
+            playerNameInput.focus({ preventScroll: true });
+        }
+    }
+
+    function closeNameEditor() {
+        nameEditor.hidden = true;
+        playerNameInput.blur();
+    }
+
+    function savePlayerName() {
+        if (!selectedPlayer) {
+            return;
+        }
+
+        const nextName = playerNameInput.value.trim();
+        if (!nextName) {
+            playerNameInput.value = playerNames[selectedPlayer.team][selectedPlayer.index];
+            return;
+        }
+
+        playerNames[selectedPlayer.team][selectedPlayer.index] = nextName;
+        setStatus(`Updated player name to ${nextName}.`);
+        renderTeam(selectedPlayer.team);
+        closeNameEditor();
+    }
+
+    function makeDraggable(element, onMove, onTap) {
+        element.addEventListener('pointerdown', event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const pointerId = event.pointerId;
+            const startX = event.clientX;
+            const startY = event.clientY;
+            let moved = false;
+
+            if (element.setPointerCapture) {
+                element.setPointerCapture(pointerId);
+            }
+
+            const handleMove = moveEvent => {
+                if (moveEvent.pointerId !== pointerId) {
+                    return;
+                }
+
+                const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+                if (distance > 6) {
+                    moved = true;
+                }
+
+                onMove(moveEvent.clientX, moveEvent.clientY);
+            };
+
+            const handleUp = upEvent => {
+                if (upEvent.pointerId !== pointerId) {
+                    return;
+                }
+
+                cleanup();
+
+                if (!moved && onTap) {
+                    onTap();
+                }
+            };
+
+            const cleanup = () => {
+                document.removeEventListener('pointermove', handleMove);
+                document.removeEventListener('pointerup', handleUp);
+                document.removeEventListener('pointercancel', cleanup);
+            };
+
+            document.addEventListener('pointermove', handleMove, { passive: false });
+            document.addEventListener('pointerup', handleUp);
+            document.addEventListener('pointercancel', cleanup);
         });
-        el.addEventListener('touchstart', e => {
-            e.preventDefault(); e.stopPropagation();
-            const move = ev => { const t = ev.touches[0]; onMove(t.clientX, t.clientY); };
-            const end = () => { document.removeEventListener('touchmove', move); document.removeEventListener('touchend', end); };
-            document.addEventListener('touchmove', move, { passive: false });
-            document.addEventListener('touchend', end);
-        }, { passive: false });
     }
 
     function renderBall() {
-        const g = document.getElementById('ball-group');
-        g.innerHTML = '';
-        const [bx, by] = ballPos;
-        const ballG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        ballG.setAttribute('transform', `translate(${bx},${by})`);
-        ballG.style.cursor = 'grab';
+        const group = document.getElementById('ball-group');
+        group.innerHTML = '';
+
+        const [ballX, ballY] = ballPos;
+        const ballGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        ballGroup.setAttribute('transform', `translate(${ballX},${ballY})`);
+        ballGroup.style.cursor = 'grab';
+
+        const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        hitArea.setAttribute('r', '20');
+        hitArea.setAttribute('fill', 'transparent');
+        ballGroup.appendChild(hitArea);
 
         const shadow = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
-        shadow.setAttribute('rx', '10'); shadow.setAttribute('ry', '3'); shadow.setAttribute('cy', '12');
+        shadow.setAttribute('rx', '10');
+        shadow.setAttribute('ry', '3');
+        shadow.setAttribute('cy', '12');
         shadow.setAttribute('fill', 'rgba(0,0,0,0.3)');
-        ballG.appendChild(shadow);
+        ballGroup.appendChild(shadow);
 
         const ball = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         ball.setAttribute('r', '10');
         ball.setAttribute('fill', 'white');
         ball.setAttribute('stroke', 'rgba(0,0,0,0.25)');
         ball.setAttribute('stroke-width', '1');
-        ballG.appendChild(ball);
+        ballGroup.appendChild(ball);
 
-        makeDraggable(ballG, (cx, cy) => {
-            const pt = getSVGPoint(cx, cy);
-            ballPos = [clamp(pt.x, 25, 375), clamp(pt.y, 25, 545)];
+        makeDraggable(ballGroup, (clientX, clientY) => {
+            const point = getSVGPoint(clientX, clientY);
+            ballPos = [clamp(point.x, 25, 375), clamp(point.y, 25, 545)];
             renderBall();
+        }, () => {
+            closeNameEditor();
+            setStatus('Ball selected. Drag it anywhere on the pitch.');
         });
 
-        g.appendChild(ballG);
+        group.appendChild(ballGroup);
     }
 
     function renderTeam(team) {
-        const g = document.getElementById('players-' + team);
-        g.innerHTML = '';
+        const group = document.getElementById('players-' + team);
+        group.innerHTML = '';
         const color = team === 'A' ? colorA : colorB;
 
-        playerPositions[team].forEach((pos, i) => {
-            const pg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            pg.setAttribute('transform', `translate(${pos[0]},${pos[1]})`);
-            pg.style.cursor = 'grab';
+        playerPositions[team].forEach((position, index) => {
+            const playerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            playerGroup.setAttribute('transform', `translate(${position[0]},${position[1]})`);
+            playerGroup.style.cursor = 'grab';
+
+            const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            hitArea.setAttribute('r', '26');
+            hitArea.setAttribute('fill', 'transparent');
+            playerGroup.appendChild(hitArea);
 
             const shadow = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
-            shadow.setAttribute('rx', '15'); shadow.setAttribute('ry', '4'); shadow.setAttribute('cy', '18');
+            shadow.setAttribute('rx', '15');
+            shadow.setAttribute('ry', '4');
+            shadow.setAttribute('cy', '18');
             shadow.setAttribute('fill', 'rgba(0,0,0,0.25)');
-            pg.appendChild(shadow);
+            playerGroup.appendChild(shadow);
 
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             circle.setAttribute('r', '17');
             circle.setAttribute('fill', color.fill);
             circle.setAttribute('stroke', color.stroke);
-            circle.setAttribute('stroke-width', '2');
-            pg.appendChild(circle);
+            circle.setAttribute('stroke-width', selectedPlayer && selectedPlayer.team === team && selectedPlayer.index === index ? '3' : '2');
+            playerGroup.appendChild(circle);
 
-            const label = playerNames[team][i];
+            const label = playerNames[team][index];
             const parts = label.split(' ');
-            const num = parts[0], abbr = parts.slice(1).join(' ');
+            const number = parts[0];
+            const role = parts.slice(1).join(' ');
 
-            const numText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            numText.setAttribute('text-anchor', 'middle');
-            numText.setAttribute('dy', abbr ? '-1' : '5');
-            numText.setAttribute('fill', color.text);
-            numText.setAttribute('font-size', abbr ? '11' : '13');
-            numText.setAttribute('font-weight', '500');
-            numText.setAttribute('font-family', 'var(--font-sans, sans-serif)');
-            numText.textContent = num;
-            pg.appendChild(numText);
+            const numberText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            numberText.setAttribute('text-anchor', 'middle');
+            numberText.setAttribute('dy', role ? '-1' : '5');
+            numberText.setAttribute('fill', color.text);
+            numberText.setAttribute('font-size', role ? '11' : '13');
+            numberText.setAttribute('font-weight', '600');
+            numberText.setAttribute('font-family', 'var(--font-ui)');
+            numberText.textContent = number;
+            playerGroup.appendChild(numberText);
 
-            if (abbr) {
-                const abbrText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                abbrText.setAttribute('text-anchor', 'middle'); abbrText.setAttribute('dy', '9');
-                abbrText.setAttribute('fill', color.text); abbrText.setAttribute('font-size', '7.5');
-                abbrText.setAttribute('font-family', 'var(--font-sans, sans-serif)');
-                abbrText.setAttribute('opacity', '0.85');
-                abbrText.textContent = abbr;
-                pg.appendChild(abbrText);
+            if (role) {
+                const roleText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                roleText.setAttribute('text-anchor', 'middle');
+                roleText.setAttribute('dy', '9');
+                roleText.setAttribute('fill', color.text);
+                roleText.setAttribute('font-size', '7.5');
+                roleText.setAttribute('font-family', 'var(--font-ui)');
+                roleText.setAttribute('opacity', '0.85');
+                roleText.textContent = role;
+                playerGroup.appendChild(roleText);
             }
 
-            makeDraggable(pg, (cx, cy) => {
-                const pt = getSVGPoint(cx, cy);
-                playerPositions[team][i] = [clamp(pt.x, 25, 375), clamp(pt.y, 25, 545)];
+            makeDraggable(playerGroup, (clientX, clientY) => {
+                const point = getSVGPoint(clientX, clientY);
+                playerPositions[team][index] = [clamp(point.x, 25, 375), clamp(point.y, 25, 545)];
                 renderTeam(team);
+            }, () => {
+                setSelectedPlayer(team, index);
+                renderTeam('A');
+                renderTeam('B');
+
+                if (isTouchLikeDevice) {
+                    openNameEditor();
+                }
             });
 
-            pg.addEventListener('dblclick', () => {
-                const newName = prompt('Rename player (e.g. "7 Kane"):', playerNames[team][i]);
-                if (newName && newName.trim()) { playerNames[team][i] = newName.trim(); renderTeam(team); }
+            playerGroup.addEventListener('dblclick', () => {
+                setSelectedPlayer(team, index);
+                renderTeam('A');
+                renderTeam('B');
+                openNameEditor();
             });
 
-            g.appendChild(pg);
+            group.appendChild(playerGroup);
         });
     }
 
-    function render() { renderTeam('A'); renderTeam('B'); renderBall(); }
-    function resetPositions() { initPositions(); render(); }
+    function render() {
+        renderTeam('A');
+        renderTeam('B');
+        renderBall();
+    }
+
+    function resetPositions() {
+        initPositions();
+        render();
+    }
+
+    resetBtn.addEventListener('click', resetPositions);
+    renameBtn.addEventListener('click', openNameEditor);
+    cancelEditBtn.addEventListener('click', closeNameEditor);
+    nameEditor.addEventListener('submit', event => {
+        event.preventDefault();
+        savePlayerName();
+        renderTeam('A');
+        renderTeam('B');
+    });
+
+    pitch.addEventListener('click', event => {
+        if (event.target === pitch) {
+            clearSelection();
+            renderTeam('A');
+            renderTeam('B');
+        }
+    });
+
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            closeNameEditor();
+        }
+    });
 
     initPositions();
     render();
