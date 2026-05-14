@@ -111,6 +111,11 @@
         transform: translateY(1px) scale(0.99);
     }
 
+    .ctrl-btn.active {
+        background: linear-gradient(180deg, #e8f3ff, #dff3ff);
+        border-color: rgba(24, 95, 165, 0.28);
+    }
+
     .ctrl-btn:disabled {
         background: var(--action-disabled);
         color: rgba(21, 47, 23, 0.45);
@@ -126,6 +131,24 @@
         color: var(--text-muted);
         font-size: 0.92rem;
         text-align: center;
+    }
+
+    /* More visible state for attacking mode so instructions aren't missed on small screens */
+    .selection-status.attacking {
+        background: linear-gradient(180deg, rgba(232, 243, 255, 0.95), rgba(223, 243, 255, 0.95));
+        border-color: rgba(24, 95, 165, 0.22);
+        color: var(--text-strong);
+        font-size: 1rem;
+        font-weight: 700;
+        padding: 12px 16px;
+        box-shadow: 0 8px 20px rgba(24, 95, 165, 0.08);
+    }
+
+    .selection-status.attacking::before {
+        content: '⚽ ';
+        display: inline-block;
+        margin-right: 6px;
+        transform: translateY(1px);
     }
 
     .pitch-wrap {
@@ -235,6 +258,14 @@
         <div class="controls">
             <button id="reset-btn" class="ctrl-btn" type="button">Reset layout</button>
             <button id="rename-btn" class="ctrl-btn" type="button" disabled>Rename selected</button>
+            <div style="display:flex;gap:8px;justify-self:end">
+                <button id="mode-standard-btn" class="ctrl-btn" type="button" aria-pressed="true">Standard
+                    Whiteboard</button>
+                <button id="mode-attack-btn" class="ctrl-btn" type="button" aria-pressed="false">Attacking
+                    Whiteboard</button>
+                <button id="mode-defend-btn" class="ctrl-btn" type="button" aria-pressed="false" disabled>Defending
+                    Whiteboard</button>
+            </div>
         </div>
 
         <div id="selection-status" class="selection-status">Drag players with one finger. Tap a player to rename without
@@ -311,10 +342,16 @@
     let playerNames;
     let ballPos = [200, 280];
     let selectedPlayer = null;
+    let originalPositions;
+    let possession = { team: 'A', index: 0 };
+    let attackingEnabled = false;
 
     const pitch = document.getElementById('pitch');
     const resetBtn = document.getElementById('reset-btn');
     const renameBtn = document.getElementById('rename-btn');
+    const modeStandardBtn = document.getElementById('mode-standard-btn');
+    const modeAttackBtn = document.getElementById('mode-attack-btn');
+    const modeDefendBtn = document.getElementById('mode-defend-btn');
     const selectionStatus = document.getElementById('selection-status');
     const nameEditor = document.getElementById('name-editor');
     const editorCopy = document.getElementById('editor-copy');
@@ -341,7 +378,13 @@
     function initPositions() {
         playerPositions = deepCopy(defaultPositions);
         playerNames = deepCopy(defaultNames);
-        ballPos = [200, 280];
+        // store immutable original positions for spacing constraints
+        originalPositions = deepCopy(playerPositions);
+
+        // ball starts with blue keeper
+        possession = { team: 'A', index: 0 };
+        const keeper = playerPositions.A[0];
+        ballPos = [keeper[0] + 12, keeper[1] - 6];
         clearSelection();
     }
 
@@ -358,6 +401,310 @@
 
     function setStatus(message) {
         selectionStatus.textContent = message;
+    }
+
+    function ballPositionForRender() {
+        if (possession && playerPositions[possession.team]) {
+            const p = playerPositions[possession.team][possession.index];
+            if (p) return [p[0] + 12, p[1] - 6];
+        }
+        return ballPos;
+    }
+
+    function animate(from, to, ms = 320, onFrame) {
+        const start = performance.now();
+        const dx = to[0] - from[0];
+        const dy = to[1] - from[1];
+
+        return new Promise(resolve => {
+            function step(now) {
+                const t = Math.min(1, (now - start) / ms);
+                const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+                const x = from[0] + dx * ease;
+                const y = from[1] + dy * ease;
+                if (onFrame) onFrame([x, y]);
+                if (t < 1) requestAnimationFrame(step); else resolve();
+            }
+
+            requestAnimationFrame(step);
+        });
+    }
+
+    async function passBallTo(team, index) {
+        if (!attackingEnabled) return;
+        // animate ball from current render pos to target player's render pos
+        const from = ballPositionForRender();
+        const target = playerPositions[team][index];
+        if (!target) return;
+        const to = [target[0] + 12, target[1] - 6];
+
+        drawPassArc(from, to);
+        await animate(from, to, 420, pos => { ballPos = pos; renderBall(); });
+        possession = { team, index };
+        ballPos = [to[0], to[1]];
+        setStatus(`Passed to ${playerNames[team][index]}.`);
+        render();
+        // enforce shape immediately when a pass completes (e.g., if passed to #7)
+        try { enforceShapeRules(); } catch (e) { /* noop */ }
+        // update opposition after pass
+        updateOppositionTowardsBall();
+    }
+
+    async function movePossessorTo(clientX, clientY) {
+        if (!attackingEnabled) return;
+        if (!possession) return;
+        const pt = getSVGPoint(clientX, clientY);
+        const team = possession.team; const idx = possession.index;
+        const start = playerPositions[team][idx];
+        const end = [clamp(pt.x, 25, 375), clamp(pt.y, 25, 545)];
+
+        // show destination indicator
+        const pulse = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        pulse.setAttribute('cx', end[0]); pulse.setAttribute('cy', end[1]); pulse.setAttribute('r', '6');
+        pulse.setAttribute('fill', 'rgba(255,255,255,0.85)'); pulse.setAttribute('opacity', '0.9');
+        pulse.setAttribute('pointer-events', 'none');
+        pitch.appendChild(pulse);
+
+        await animate(start, end, 420, pos => {
+            playerPositions[team][idx] = [pos[0], pos[1]];
+            ballPos = [pos[0] + 12, pos[1] - 6];
+            render();
+        });
+
+        // update opposition after movement
+        updateOppositionTowardsBall();
+
+        // fade out indicator
+        let t0 = performance.now();
+        function fade(now) {
+            const t = (now - t0) / 380;
+            pulse.setAttribute('opacity', String(Math.max(0, 0.9 - t)));
+            pulse.setAttribute('r', String(6 + t * 6));
+            if (t < 1) requestAnimationFrame(fade); else pulse.remove();
+        }
+        requestAnimationFrame(fade);
+    }
+
+    function updateOppositionTowardsBall() {
+        if (!attackingEnabled) return;
+        // move each red (B) player part-way towards the current ball render position
+        const target = ballPositionForRender();
+        if (!target) return;
+        const moves = [];
+
+        playerPositions.B.forEach((pos, i) => {
+            const curr = pos;
+            const orig = (originalPositions && originalPositions.B && originalPositions.B[i]) ? originalPositions.B[i] : curr;
+
+            const vx = target[0] - orig[0];
+            const vy = target[1] - orig[1];
+            const distOrig = Math.hypot(vx, vy) || 0.0001;
+
+            // desired offset from original toward the ball, capped to 30px
+            const desiredFromOrig = Math.min(30, distOrig);
+            if (desiredFromOrig < 6) return; // ball is very close to original position, no meaningful move
+
+            const desiredX = orig[0] + (vx / distOrig) * desiredFromOrig;
+            const desiredY = orig[1] + (vy / distOrig) * desiredFromOrig;
+
+            // compute difference from current to desired and take a small capped step
+            const dx = desiredX - curr[0];
+            const dy = desiredY - curr[1];
+            const need = Math.hypot(dx, dy);
+            if (need < 4) return; // already near desired
+
+            const maxStep = 12; // small movement per update
+            const step = Math.min(maxStep, need);
+            const nextX = curr[0] + (dx / need) * step;
+            const nextY = curr[1] + (dy / need) * step;
+            const next = [clamp(nextX, 25, 375), clamp(nextY, 25, 545)];
+
+            moves.push((async () => {
+                await animate(curr, next, 220, p => {
+                    playerPositions.B[i] = [p[0], p[1]];
+                    render();
+                });
+            })());
+        });
+
+        Promise.all(moves).then(() => {
+            render();
+            try { enforceShapeRules(); } catch (e) { /* noop */ }
+        }).catch(() => { render(); try { enforceShapeRules(); } catch (e) { } });
+    }
+
+    function enforceShapeRules() {
+        if (!attackingEnabled) return;
+        // Keep the A-team shape relative to the current possessor.
+        // Both wingers (#4 index 3 and #6 index 5) should move forward to match the possessor's line if the
+        // possessor is ahead of them. They never get pulled backward from their original positions.
+        // #7 (index 6) should not stay behind the forward-most of #4/#6 and will step up to match when needed.
+        if (!originalPositions || !originalPositions.A) return;
+
+        const idx4 = 3, idx6 = 5, idx7 = 6;
+        const o4 = originalPositions.A[idx4];
+        const o6 = originalPositions.A[idx6];
+        const o7 = originalPositions.A[idx7];
+        if (!o4 || !o6 || !o7) return;
+
+        // Only adjust when Blue has possession
+        if (!possession || possession.team !== 'A') return;
+
+        const poss = playerPositions.A[possession.index];
+        if (!poss) return;
+
+        const possY = poss[1];
+        const maxOffset = 30;
+        const adjustments = [];
+
+        // For each winger (4 and 6): do NOT move the current possessor; otherwise, if the possessor
+        // is ahead of their original line, nudge them forward (never pull them backward).
+        const possIdx = possession.index;
+        const possIsWinger = (possIdx === idx4 || possIdx === idx6);
+
+        [idx4, idx6].forEach(idx => {
+            if (idx === possIdx) return; // never move the ball-carrier here
+            const orig = originalPositions.A[idx];
+            const cur = playerPositions.A[idx];
+            if (!orig || !cur) return;
+
+            let desiredY = orig[1];
+            // If the possessor is the striker (#7), force the wingers to line up with her
+            // (but never drag them backward beyond their original line).
+            if (possession.index === idx7) {
+                desiredY = Math.min(possY, orig[1]);
+            } else if (possIsWinger) {
+                // If the possessor is one of the wingers, the opposite winger should match
+                // the possessor's forward line (but never be dragged backward).
+                desiredY = possY;
+            } else {
+                // Otherwise, gently nudge them forward toward the possessor, but cap the
+                // offset so they don't over-commit from their original position.
+                if (possY < orig[1]) {
+                    desiredY = Math.max(orig[1] - maxOffset, possY);
+                }
+            }
+
+            // Only move forward (smaller y). Do not move a player backwards.
+            if (desiredY < cur[1] - 3) {
+                adjustments.push({ idx, x: cur[0], y: desiredY });
+            }
+        });
+
+        // Ensure #7 isn't behind the forward-most of #4/#6.
+        const adjFor = (i) => adjustments.find(a => a.idx === i);
+        const desired4 = adjFor(idx4) ? adjFor(idx4).y : playerPositions.A[idx4][1];
+        const desired6 = adjFor(idx6) ? adjFor(idx6).y : playerPositions.A[idx6][1];
+        const forwardLineY = Math.min(desired4, desired6);
+
+        // Soft follow for #5 (central midfielder, index 4): follow the wingers more strongly
+        // and be allowed to move up toward where #7 starts (but remain behind play past halfway).
+        const idx5 = 4;
+        const o5 = originalPositions.A[idx5];
+        const cur5 = playerPositions.A[idx5];
+        if (o5 && cur5) {
+            let desired5Y = cur5[1];
+            if (forwardLineY < o5[1]) {
+                const followPercent = 0.75; // stronger follow than before
+                const pull = (o5[1] - forwardLineY) * followPercent;
+                const maxOffset5 = Math.min(120, Math.max(30, o5[1] - (o7[1] + 6)));
+                const desiredBare = o5[1] - Math.min(pull, maxOffset5);
+                // Do not move in front of where #7 starts (leave slight offset)
+                desired5Y = Math.max(desiredBare, o7[1] + 6);
+            }
+            // If play has crossed the halfway line, ensure #5 stays just behind play by ~12px.
+            const halfLineY = 280;
+            if (forwardLineY < halfLineY) {
+                desired5Y = Math.max(desired5Y, forwardLineY + 12);
+            }
+            if (desired5Y < cur5[1] - 3) {
+                adjustments.push({ idx: idx5, x: cur5[0], y: desired5Y });
+            }
+        }
+
+        const cur7 = playerPositions.A[idx7];
+        if (cur7 && cur7[1] > forwardLineY + 2) {
+            // Move #7 up to the forward line so they never lag behind the wingers.
+            // Only move forward (smaller y). No cap here — #7 should keep up when the
+            // wingers step further forward.
+            const desired7Y = forwardLineY;
+            if (desired7Y < cur7[1] - 3) {
+                adjustments.push({ idx: idx7, x: cur7[0], y: desired7Y });
+            }
+        }
+
+        if (adjustments.length === 0) return;
+
+        adjustments.forEach(adj => {
+            const start = playerPositions.A[adj.idx];
+            const end = [clamp(adj.x, 25, 375), clamp(adj.y, 25, 545)];
+            animate(start, end, 260, p => {
+                playerPositions.A[adj.idx] = [p[0], p[1]];
+                if (possession && possession.team === 'A' && possession.index === adj.idx) {
+                    ballPos = [p[0] + 12, p[1] - 6];
+                }
+                render();
+            });
+        });
+    }
+
+    function drawPassArc(from, to) {
+        try {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            const mx = (from[0] + to[0]) / 2;
+            const my = (from[1] + to[1]) / 2;
+            const ctrlY = Math.min(my - 30, my - Math.abs(to[0] - from[0]) * 0.12);
+            const d = `M ${from[0]} ${from[1]} Q ${mx} ${ctrlY} ${to[0]} ${to[1]}`;
+            path.setAttribute('d', d);
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#ffd96b');
+            path.setAttribute('stroke-width', '2');
+            path.setAttribute('stroke-linecap', 'round');
+            path.setAttribute('opacity', '0.95');
+            path.setAttribute('pointer-events', 'none');
+            pitch.appendChild(path);
+
+            const start = performance.now();
+            (function fade(now) {
+                const t = (now - start) / 700;
+                path.setAttribute('opacity', String(Math.max(0, 0.95 - t)));
+                if (t < 1) requestAnimationFrame(fade); else path.remove();
+            })(start);
+        } catch (e) {
+            // noop
+        }
+    }
+
+    async function shootAtGoal(goal) {
+        if (!attackingEnabled) return;
+        if (!possession) return;
+        const shooter = playerPositions[possession.team][possession.index];
+        if (!shooter) return;
+
+        const from = [shooter[0] + 12, shooter[1] - 6];
+        const to = goal === 'top' ? [200, 16] : [200, 546];
+
+        drawPassArc(from, to);
+        await animate(from, to, 520, pos => { ballPos = pos; renderBall(); });
+
+        // simple scoring chance by distance
+        const dx = from[0] - to[0]; const dy = from[1] - to[1];
+        const dist = Math.hypot(dx, dy);
+        const maxDist = 420;
+        const prob = 0.4 + (1 - Math.min(dist, maxDist) / maxDist) * 0.5;
+        const scored = Math.random() < prob;
+
+        if (scored) {
+            setStatus('GOAL!');
+            ballPos = [to[0], to[1]];
+            possession = null;
+        } else {
+            setStatus('Saved or missed — loose ball.');
+            ballPos = [to[0], to[1]];
+            possession = null;
+        }
+
+        render();
     }
 
     function setSelectedPlayer(team, index) {
@@ -411,7 +758,7 @@
         closeNameEditor();
     }
 
-    function makeDraggable(element, onMove, onTap) {
+    function makeDraggable(element, onMove, onTap, onEnd) {
         element.addEventListener('pointerdown', event => {
             event.preventDefault();
             event.stopPropagation();
@@ -448,6 +795,10 @@
                 if (!moved && onTap) {
                     onTap();
                 }
+
+                if (moved && onEnd) {
+                    try { onEnd(); } catch (e) { /* ignore */ }
+                }
             };
 
             const cleanup = () => {
@@ -465,8 +816,7 @@
     function renderBall() {
         const group = document.getElementById('ball-group');
         group.innerHTML = '';
-
-        const [ballX, ballY] = ballPos;
+        const [ballX, ballY] = ballPositionForRender();
         const ballGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         ballGroup.setAttribute('transform', `translate(${ballX},${ballY})`);
         ballGroup.style.cursor = 'grab';
@@ -491,6 +841,17 @@
         ballGroup.appendChild(ball);
 
         makeDraggable(ballGroup, (clientX, clientY) => {
+            // If in whiteboard mode, start-drag should clear any player possession so the
+            // ball becomes loose and doesn't snap back to a player (fixes being 'stuck').
+            if (!attackingEnabled && possession) {
+                possession = null;
+                setStatus('Ball is loose (whiteboard mode).');
+            }
+
+            // allow dragging ball:
+            // - when `attackingEnabled` is true, only allow dragging if ball is not possessed
+            // - when `attackingEnabled` is false (whiteboard mode), dragging is allowed and possession cleared above
+            if (attackingEnabled && possession && playerPositions[possession.team]) return;
             const point = getSVGPoint(clientX, clientY);
             ballPos = [clamp(point.x, 25, 375), clamp(point.y, 25, 545)];
             renderBall();
@@ -561,8 +922,18 @@
             makeDraggable(playerGroup, (clientX, clientY) => {
                 const point = getSVGPoint(clientX, clientY);
                 playerPositions[team][index] = [clamp(point.x, 25, 375), clamp(point.y, 25, 545)];
+                // if this player has possession, move the ball with them
+                if (possession && possession.team === team && possession.index === index) {
+                    ballPos = [playerPositions[team][index][0] + 12, playerPositions[team][index][1] - 6];
+                }
                 renderTeam(team);
             }, () => {
+                // tap behavior: if the tapped player is a teammate and someone on that team has the ball, pass to them
+                if (attackingEnabled && possession && possession.team === team && possession.index !== index) {
+                    passBallTo(team, index);
+                    return;
+                }
+
                 setSelectedPlayer(team, index);
                 renderTeam('A');
                 renderTeam('B');
@@ -570,7 +941,7 @@
                 if (isTouchLikeDevice) {
                     openNameEditor();
                 }
-            });
+            }, attackingEnabled ? updateOppositionTowardsBall : null);
 
             playerGroup.addEventListener('dblclick', () => {
                 setSelectedPlayer(team, index);
@@ -596,6 +967,67 @@
 
     resetBtn.addEventListener('click', resetPositions);
     renameBtn.addEventListener('click', openNameEditor);
+    function setMode(m) {
+        modeStandardBtn.classList.toggle('active', m === 'standard');
+        modeAttackBtn.classList.toggle('active', m === 'attacking');
+        modeDefendBtn.classList.toggle('active', m === 'defending');
+        modeStandardBtn.setAttribute('aria-pressed', String(m === 'standard'));
+        modeAttackBtn.setAttribute('aria-pressed', String(m === 'attacking'));
+        modeDefendBtn.setAttribute('aria-pressed', String(m === 'defending'));
+
+        // attackingEnabled follows the selected mode
+        attackingEnabled = (m === 'attacking');
+
+        // visually emphasise the instruction pill when attacking interactions are enabled
+        if (selectionStatus) selectionStatus.classList.toggle('attacking', m === 'attacking');
+
+        // When entering attacking mode, nudge the wingers (#4 index 3 and #6 index 5)
+        // slightly wider (out toward the touch edges). When leaving attacking mode,
+        // restore them to their original X positions.
+        try {
+            if (playerPositions && originalPositions && originalPositions.A) {
+                const idx4 = 3, idx6 = 5;
+                const widenAmount = 56; // pixels to move outward (nearer the pitch edge)
+
+                const target4X = m === 'attacking' ? originalPositions.A[idx4][0] - widenAmount : originalPositions.A[idx4][0];
+                const target6X = m === 'attacking' ? originalPositions.A[idx6][0] + widenAmount : originalPositions.A[idx6][0];
+
+                [[idx4, target4X], [idx6, target6X]].forEach(([idx, tx]) => {
+                    const cur = playerPositions.A[idx];
+                    if (!cur) return;
+                    const end = [clamp(tx, 25, 375), cur[1]];
+                    // animate the lateral move so it's visually smooth
+                    animate(cur, end, 340, p => {
+                        playerPositions.A[idx] = [p[0], p[1]];
+                        // if that player currently has the ball, keep the ball attached
+                        if (possession && possession.team === 'A' && possession.index === idx) {
+                            ballPos = [p[0] + 12, p[1] - 6];
+                        }
+                        render();
+                    });
+                });
+            }
+        } catch (e) {
+            // noop
+        }
+
+        // Reset ball to the blue goalkeeper whenever the mode is changed.
+        const keeper = playerPositions && playerPositions.A && playerPositions.A[0];
+        if (keeper) {
+            possession = { team: 'A', index: 0 };
+            ballPos = [keeper[0] + 12, keeper[1] - 6];
+        }
+
+        setStatus(m === 'attacking'
+            ? 'Attacking Whiteboard — interactions enabled. Controls: Tap a teammate to pass; tap or drag in space to run with the ball; tap the opponent goal to shoot.'
+            : (m === 'defending' ? 'Defending Whiteboard (coming soon).' : 'Standard Whiteboard — interactions disabled.'));
+        render();
+    }
+
+    modeStandardBtn.addEventListener('click', () => setMode('standard'));
+    modeAttackBtn.addEventListener('click', () => setMode('attacking'));
+    // defend button is intentionally disabled for now; keep handler ready when enabled
+    modeDefendBtn.addEventListener('click', () => setMode('defending'));
     cancelEditBtn.addEventListener('click', closeNameEditor);
     nameEditor.addEventListener('submit', event => {
         event.preventDefault();
@@ -605,11 +1037,42 @@
     });
 
     pitch.addEventListener('click', event => {
-        if (event.target === pitch) {
-            clearSelection();
-            renderTeam('A');
-            renderTeam('B');
+        // ignore clicks that hit a player
+        const hitPlayer = event.target && (event.target.closest && (event.target.closest('#players-A') || event.target.closest('#players-B')));
+        if (hitPlayer) return;
+
+        const pt = getSVGPoint(event.clientX, event.clientY);
+        // goal rectangles in the SVG: top goal x=160 y=10 width=80 height=12; bottom at y~538
+        const inTopGoal = pt.x >= 160 && pt.x <= 240 && pt.y >= 10 && pt.y <= 22;
+        const inBottomGoal = pt.x >= 160 && pt.x <= 240 && pt.y >= 538 && pt.y <= 552;
+
+        if (possession) {
+            // when attacking interactions are disabled, ignore movement/shoot commands
+            if (!attackingEnabled) {
+                clearSelection();
+                renderTeam('A');
+                renderTeam('B');
+                return;
+            }
+
+            // if the possessing team is blue (A) and top goal clicked, shoot
+            if (possession.team === 'A' && inTopGoal) {
+                shootAtGoal('top');
+                return;
+            }
+
+            if (possession.team === 'B' && inBottomGoal) {
+                shootAtGoal('bottom');
+                return;
+            }
+
+            movePossessorTo(event.clientX, event.clientY);
+            return;
         }
+
+        clearSelection();
+        renderTeam('A');
+        renderTeam('B');
     });
 
     document.addEventListener('keydown', event => {
@@ -619,5 +1082,6 @@
     });
 
     initPositions();
+    setMode('standard');
     render();
 </script>
